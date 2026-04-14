@@ -21,10 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import get_settings
 from db.database import Database
-from orchestrator.orchestrator_agent import Orchestrator
 from repositories.sop_repository import SopRepository
 from repositories.glossary_repository import GlossaryRepository
-from routers import adaptation_router, generation_router, glossary_router, sop_router, template_router, translation_router, writing_guide_router
+from routers import glossary_router, sop_router, template_router, writing_guide_router
 from services.glossary_service import GlossaryService
 from services.sop_service import SopService
 from repositories.template_repository import TemplateRepository
@@ -136,8 +135,7 @@ async def lifespan(app: FastAPI):
     # 2. Scan and register SOP documents
     _scan_and_register_sops(db)
 
-    # 3. Initialise the shared Orchestrator (with DB for template/GWP/job tracking)
-    orchestrator = Orchestrator(db=db)
+
 
     # 4. Initialize Template Library (Repository -> Service -> Router)
     template_repo = TemplateRepository(db=db)
@@ -152,11 +150,6 @@ async def lifespan(app: FastAPI):
     logger.info("Writing Guide service initialized")
 
     # 6. Inject into routers
-    generation_router.set_orchestrator(orchestrator)
-    generation_router.set_database(db)
-    adaptation_router.set_orchestrator(orchestrator)
-    translation_router.set_orchestrator(orchestrator)
-    translation_router.set_database(db)
     sop_repo = SopRepository(db)
     sop_service = SopService(sop_repo)
     sop_router.set_service(sop_service)
@@ -179,10 +172,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GP-DAT — GP Document Processing",
     description=(
-        "Agentic document-processing system with three core functionalities:\n"
-        "1. **GP Doc Generation** — Generate documents following strict templates\n"
-        "2. **Template Adaptation** — Migrate older docs to new templates\n"
-        "3. **Translation** — Translate documents into Spanish & German"
+        "Agentic document-processing system MVP focusing on:\n"
+        "1. **Template Library** — Manage structured GP templates\n"
+        "2. **Writing Guides** — Centralized style rules\n"
+        "3. **SOP Management** — Track and query source material\n"
+        "4. **Glossary** — Domain term translations"
     ),
     version="0.1.0",
     lifespan=lifespan,
@@ -252,9 +246,7 @@ app.add_middleware(
 
 # ── Register routers ───────────────────────────────────────────────────
 
-app.include_router(generation_router.router)
-app.include_router(adaptation_router.router)
-app.include_router(translation_router.router)
+
 app.include_router(sop_router.router)
 app.include_router(template_router.router)
 app.include_router(glossary_router.router)
@@ -278,9 +270,7 @@ async def root():
         "version": "0.1.0",
         "docs": "/docs",
         "endpoints": {
-            "generate": "/api/v1/generate",
-            "adapt": "/api/v1/adapt",
-            "translate": "/api/v1/translate",
+
             "templates": "/api/v1/templates",
             "writing_guides": "/api/v1/writing-guides",
             "health": "/health",

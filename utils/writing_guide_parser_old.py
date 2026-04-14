@@ -1,5 +1,5 @@
 """
-utils/writing_guide_parser.py
+utils/writing_guide_parser_old.py
 Extracts text content from writing guide files (.txt, .md, .docx, .pdf).
 
 Output is always a UTF-8 string (Markdown-formatted where possible)
@@ -17,15 +17,6 @@ logger = logging.getLogger(__name__)
 
 # Supported extensions and their handler names (for error messages)
 _SUPPORTED_EXTENSIONS: set[str] = {".txt", ".md", ".docx", ".doc", ".pdf"}
-
-# ── PDF font-size thresholds ────────────────────────────────────────────────
-_SIZE_H1 = 13.5       # main section headings
-_SIZE_H2 = 11.5       # sub-headings
-_SIZE_BODY = 10.0     # body text
-
-# Y-coordinate thresholds (PDF points) for header/footer zones
-_HEADER_MAX_Y = 100
-_FOOTER_MIN_Y = 770
 
 
 class ParsingError(Exception):
@@ -179,7 +170,6 @@ def _parse_docx(file_path: Path) -> str:
     Extracts paragraphs preserving basic structure:
     - Heading styles → Markdown headings
     - Normal paragraphs → plain text lines
-    - Tables → Markdown tables
     """
     try:
         from docx import Document  # type: ignore[import-untyped]
@@ -200,150 +190,38 @@ def _parse_docx(file_path: Path) -> str:
         style_name = (para.style.name or "").lower()
 
         # Map Word heading styles to Markdown headings
-        if "heading 1" in style_name:
-            lines.append(f"# {text}")
-        elif "heading 2" in style_name:
-            lines.append(f"## {text}")
-        elif "heading 3" in style_name:
-            lines.append(f"### {text}")
-        elif "heading" in style_name:
-            lines.append(f"#### {text}")
+        if style_name.startswith("heading"):
+            try:
+                level = int(style_name.replace("heading", "").strip())
+            except ValueError:
+                level = 1
+            lines.append(f"{'#' * level} {text}")
         else:
             lines.append(text)
-
-    # Also extract tables
-    for table in doc.tables:
-        rows: list[list[str]] = []
-        for row in table.rows:
-            rows.append([cell.text.strip() for cell in row.cells])
-        if rows:
-            md_table = _rows_to_md_table(rows)
-            lines.append(md_table)
 
     return "\n\n".join(lines)
 
 
 def _parse_pdf(file_path: Path) -> str:
     """
-    Handle .pdf files using PyMuPDF and pdfplumber.
+    Handle .pdf files using pymupdf4llm.
 
-    Produces high-quality Markdown output preserving headings,
-    tables, and basic formatting based on font size analysis.
+    pymupdf4llm produces high-quality Markdown output
+    preserving headings, lists, and basic formatting.
     """
     try:
-        import fitz  # PyMuPDF
-        import pdfplumber
+        import pymupdf4llm  # type: ignore[import-untyped]
     except ImportError as exc:
         raise ParsingError(
-            "PyMuPDF (fitz) and pdfplumber are required for .pdf parsing. "
-            "Install with: pip install PyMuPDF pdfplumber"
+            "pymupdf4llm is required for .pdf parsing. "
+            "Install it with: pip install pymupdf4llm"
         ) from exc
 
     try:
-        # Step 1: extract tables per page via pdfplumber
-        tables_by_page: dict[int, list[str]] = {}
-        with pdfplumber.open(str(file_path)) as plumber:
-            for pg_idx, page in enumerate(plumber.pages):
-                md_tables: list[str] = []
-                for table in page.extract_tables():
-                    md_tables.append(_table_to_markdown(table))
-                if md_tables:
-                    tables_by_page[pg_idx] = md_tables
-
-        # Step 2: extract text structure via PyMuPDF
-        md_parts: list[str] = []
-        doc = fitz.open(str(file_path))
-
-        for pg_idx in range(len(doc)):
-            page = doc[pg_idx]
-            page_h = page.rect.height
-            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
-
-            page_lines: list[str] = []
-
-            for block in blocks:
-                if "lines" not in block:
-                    continue
-                for line in block["lines"]:
-                    spans = line["spans"]
-                    if not spans:
-                        continue
-
-                    # Use first span for font metrics
-                    first = spans[0]
-                    y_top = first["origin"][1]
-
-                    # Skip header / footer zones
-                    if y_top < _HEADER_MAX_Y or y_top > min(_FOOTER_MIN_Y, page_h - 70):
-                        continue
-
-                    line_text = "".join(s["text"] for s in spans).strip()
-                    if not line_text:
-                        continue
-
-                    # Skip single-character watermark artefacts
-                    if len(line_text) == 1 and line_text.isalpha():
-                        continue
-
-                    size = first["size"]
-                    flags = first["flags"]
-                    is_bold = bool(flags & 2 ** 4)  # bit 4 = bold
-
-                    md_line = _classify_line(line_text, size, is_bold)
-                    page_lines.append(md_line)
-
-            # Append text lines for this page
-            if page_lines:
-                md_parts.append("\n\n".join(page_lines))
-
-            # Append any tables extracted from this page
-            if pg_idx in tables_by_page:
-                for tbl_md in tables_by_page[pg_idx]:
-                    md_parts.append(tbl_md)
-
-        doc.close()
-        return "\n\n".join(md_parts)
+        md_text: str = pymupdf4llm.to_markdown(str(file_path))
+        return md_text.strip()
     except Exception as exc:
         raise ParsingError(f"Failed to parse PDF '{file_path.name}': {exc}") from exc
-
-
-# ── Module-level helpers ─────────────────────────────────────────────────
-
-
-def _classify_line(text: str, size: float, is_bold: bool) -> str:
-    """Map a PDF text line to a Markdown line based on font metrics."""
-    if is_bold and size >= _SIZE_H1:
-        return f"# {text}"
-    if is_bold and size >= _SIZE_H2:
-        # Determine sub-level from section number pattern
-        if re.match(r"^\d+\.\d+\.\d+", text):
-            return f"### {text}"
-        return f"## {text}"
-    return text
-
-
-def _table_to_markdown(table: list[list[str | None]]) -> str:
-    """Convert a pdfplumber raw table (list of rows) to Markdown."""
-    if not table:
-        return ""
-    rows = [[str(cell).strip() if cell else "" for cell in row] for row in table]
-    return _rows_to_md_table(rows)
-
-
-def _rows_to_md_table(rows: list[list[str]]) -> str:
-    """Convert a list of string rows into a Markdown table."""
-    if not rows:
-        return ""
-    # Normalise column count
-    max_cols = max(len(r) for r in rows)
-    for r in rows:
-        while len(r) < max_cols:
-            r.append("")
-
-    header = "| " + " | ".join(rows[0]) + " |"
-    sep = "| " + " | ".join("---" for _ in rows[0]) + " |"
-    body_lines = ["| " + " | ".join(row) + " |" for row in rows[1:]]
-    return "\n".join([header, sep, *body_lines])
 
 
 # ── Handler registry ────────────────────────────────────────────────────────
