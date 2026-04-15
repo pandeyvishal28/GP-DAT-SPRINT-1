@@ -92,7 +92,6 @@ class TemplateService:
 
         logger.info("Template uploaded and registered: id='%s'", template_id)
         return self._repo.get_by_id(template_id)  # type: ignore[return-value]
-    
 
     def create_from_text(
         self,
@@ -122,7 +121,6 @@ class TemplateService:
 
         logger.info("Template created from text: id='%s'", template_id)
         return self._repo.get_by_id(template_id)  # type: ignore[return-value]
-
 
     # ── Read ────────────────────────────────────────────────────────────
 

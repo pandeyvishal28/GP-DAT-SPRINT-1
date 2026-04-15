@@ -114,18 +114,18 @@ class WritingGuideService:
 
         try:
             content = extract_text(file_path)
-            
+
             # Extract metadata to gracefully populate omitted fields
             from utils.writing_guide_parser import extract_title, extract_description
-            
+
             update_kwargs: dict[str, Any] = {"content": content}
-            
+
             # Populate title if currently empty/None
             if not guide.get("title"):
                 extracted_title = extract_title(content)
                 if extracted_title:
                     update_kwargs["title"] = extracted_title
-            
+
             # Only populate description if current one is empty/None
             if not guide.get("description"):
                 extracted_description = extract_description(content)
@@ -133,7 +133,7 @@ class WritingGuideService:
                     update_kwargs["description"] = extracted_description
 
             self._repo.update(guide_id, **update_kwargs)
-            
+
             logger.info(
                 "Writing guide parsed successfully: id='%s' (%d chars)",
                 guide_id,

@@ -182,7 +182,7 @@ def _parse_docx(file_path: Path) -> str:
     - Tables → Markdown tables
     """
     try:
-        from docx import Document  # type: ignore[import-untyped]
+        from docx import Document
     except ImportError as exc:
         raise ParsingError(
             "python-docx is required for .docx parsing. "
@@ -197,7 +197,8 @@ def _parse_docx(file_path: Path) -> str:
         if not text:
             continue
 
-        style_name = (para.style.name or "").lower()
+        style = para.style.name if para.style else "Normal"
+        style_name = style.lower()
 
         # Map Word heading styles to Markdown headings
         if "heading 1" in style_name:
@@ -231,7 +232,7 @@ def _parse_pdf(file_path: Path) -> str:
     tables, and basic formatting based on font size analysis.
     """
     try:
-        import fitz  # PyMuPDF
+        import fitz  # type: ignore
         import pdfplumber
     except ImportError as exc:
         raise ParsingError(
@@ -256,8 +257,8 @@ def _parse_pdf(file_path: Path) -> str:
 
         for pg_idx in range(len(doc)):
             page = doc[pg_idx]
-            page_h = page.rect.height
-            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+            page_h = page.rect.height  # type: ignore
+            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]  # type: ignore
 
             page_lines: list[str] = []
 

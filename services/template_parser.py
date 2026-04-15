@@ -19,10 +19,10 @@ import logging
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from docx import Document
 from docx.oxml.ns import qn
-from lxml import etree  # noqa: F401 — used by docx internally
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +313,7 @@ def group_into_chapters(doc) -> list:
     Elements before the first Heading 1 go into a special "preamble" chapter.
     """
     chapters = []
-    current_chapter = {
+    current_chapter: dict[str, Any] = {
         "title": "PREAMBLE",
         "chapter_id": "preamble",
         "elements": [],
@@ -519,10 +519,11 @@ def render_to_markdown(chapters: list) -> str:
     lines.append("> - `{{placeholder}}` tokens are where you generate content.")
     lines.append("> - Maintain formal, regulatory-compliant language throughout.")
     lines.append(
-        "> - Each table is labeled with a `<!-- TABLE: ... -->` comment. Keep tables **separate** — never merge consecutive tables."
+        "> - Each table is labeled with a `<!-- TABLE: ... -->` comment."
+        " Keep tables **separate** \u2014 never merge consecutive tables."
     )
     lines.append("")
-    
+
     for chapter in chapters:
         # Skip preamble if it has no meaningful content
         if chapter["chapter_id"] == "preamble":
@@ -542,7 +543,7 @@ def render_to_markdown(chapters: list) -> str:
 
         # Collect consecutive instructions to group into one callout block
         # This avoids many tiny separate callout blocks for the same section
-        pending_instructions = []
+        pending_instructions: list[str] = []
         prev_was_table = False  # Track consecutive tables to insert separators
 
         def flush_instructions():
@@ -586,7 +587,10 @@ def render_to_markdown(chapters: list) -> str:
                         table_md = render_table_to_markdown(element)
                         if table_md:
                             lines.append("> [!INSTRUCTION]")
-                            lines.append("> The following table is for reference only — do NOT include it in the output:")
+                            lines.append(
+                                "> The following table is for reference only"
+                                " \u2014 do NOT include it in the output:"
+                            )
                             for tline in table_md.splitlines():
                                 lines.append(f"> {tline}")
                             lines.append("")
@@ -673,4 +677,3 @@ if __name__ == "__main__":
     out_dir = sys.argv[2] if len(sys.argv) > 2 else "data/blueprints"
     result = parse_docx_to_blueprint(input_file, out_dir)
     print(f"Done → {result}")
-

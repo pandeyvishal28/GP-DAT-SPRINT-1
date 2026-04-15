@@ -156,12 +156,14 @@ class Database:
             # 5. Glossary Entries
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS glossary_entries (
-                    id               TEXT PRIMARY KEY,
+                    glossary_id      TEXT PRIMARY KEY,
                     term             TEXT NOT NULL,
                     do_not_translate INTEGER DEFAULT 0,
                     translations     TEXT,
                     scope            TEXT NOT NULL,
-                    notes            TEXT,
+                    comments         TEXT,
+                    de_comments      TEXT,
+                    es_comments      TEXT,
                     is_active        INTEGER DEFAULT 1,
                     created_at       TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at       TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -191,6 +193,26 @@ class Database:
                 logger.info("  ✓ Migration: renamed 'registered_at' to 'uploaded_at' in sop_documents")
             except Exception:
                 pass  # Column already renamed or table was created fresh
+
+            # Rename id → glossary_id in glossary_entries for existing DBs
+            try:
+                conn.execute("ALTER TABLE glossary_entries RENAME COLUMN id TO glossary_id")
+                logger.info("  ✓ Migration: renamed 'id' to 'glossary_id' in glossary_entries")
+            except Exception:
+                pass  # Column already renamed or table was created fresh
+
+            # Rename notes → comments and add de_comments, es_comments for existing DBs
+            try:
+                conn.execute("ALTER TABLE glossary_entries RENAME COLUMN notes TO comments")
+                logger.info("  ✓ Migration: renamed 'notes' to 'comments' in glossary_entries")
+            except Exception:
+                pass  # Column already renamed or table was created fresh
+            for col_name in ("de_comments", "es_comments"):
+                try:
+                    conn.execute(f"ALTER TABLE glossary_entries ADD COLUMN {col_name} TEXT")
+                    logger.info("  ✓ Migration: added '%s' column to glossary_entries", col_name)
+                except Exception:
+                    pass  # Column already exists
 
         logger.info("Database initialization complete — all 5 tables ready")
 
@@ -366,7 +388,7 @@ class Database:
             row_id = cursor.lastrowid
 
         logger.info("  ✓ GWP v%s saved as active (row_id=%d)", version, row_id)
-        return row_id
+        return int(row_id) if row_id is not None else 0
 
     def get_active_gwp(self) -> dict[str, Any] | None:
         """Return the currently active GWP version."""
@@ -554,12 +576,14 @@ class Database:
 
     def insert_glossary_entry(
         self,
-        entry_id: str,
+        glossary_id: str,
         term: str,
         scope: str,
         do_not_translate: bool = False,
         translations_json: str | None = None,
-        notes: str | None = None,
+        comments: str | None = None,
+        de_comments: str | None = None,
+        es_comments: str | None = None,
     ) -> None:
         """Insert a new glossary entry. Raises on duplicate (term, scope)."""
         now = datetime.now(timezone.utc).isoformat()
@@ -567,17 +591,20 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO glossary_entries
-                    (id, term, do_not_translate, translations, scope, notes,
+                    (glossary_id, term, do_not_translate, translations, scope,
+                     comments, de_comments, es_comments,
                      is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
-                    entry_id,
+                    glossary_id,
                     term,
                     1 if do_not_translate else 0,
                     translations_json,
                     scope,
-                    notes,
+                    comments,
+                    de_comments,
+                    es_comments,
                     now,
                     now,
                 ),
@@ -602,11 +629,11 @@ class Database:
             rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
-    def get_glossary_entry(self, entry_id: str) -> dict[str, Any] | None:
+    def get_glossary_entry(self, glossary_id: str) -> dict[str, Any] | None:
         """Fetch a single glossary entry by ID."""
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT * FROM glossary_entries WHERE id = ?", (entry_id,)
+                "SELECT * FROM glossary_entries WHERE glossary_id = ?", (glossary_id,)
             ).fetchone()
         return dict(row) if row else None
 
@@ -621,7 +648,7 @@ class Database:
             ).fetchone()
         return dict(row) if row else None
 
-    def update_glossary_entry(self, entry_id: str, **fields: Any) -> bool:
+    def update_glossary_entry(self, glossary_id: str, **fields: Any) -> bool:
         """
         Update specific fields on a glossary entry.
         Returns True if a row was updated.
@@ -629,7 +656,8 @@ class Database:
         if not fields:
             return False
 
-        allowed = {"term", "do_not_translate", "translations", "scope", "notes", "is_active"}
+        allowed = {"term", "do_not_translate", "translations", "scope",
+                   "comments", "de_comments", "es_comments", "is_active"}
         updates: list[str] = []
         values: list[Any] = []
 
@@ -644,20 +672,20 @@ class Database:
 
         updates.append("updated_at = ?")
         values.append(datetime.now(timezone.utc).isoformat())
-        values.append(entry_id)
+        values.append(glossary_id)
 
         with self._connect() as conn:
             cursor = conn.execute(
-                f"UPDATE glossary_entries SET {', '.join(updates)} WHERE id = ?",
+                f"UPDATE glossary_entries SET {', '.join(updates)} WHERE glossary_id = ?",
                 values,
             )
         return cursor.rowcount > 0
 
-    def delete_glossary_entry(self, entry_id: str) -> bool:
+    def delete_glossary_entry(self, glossary_id: str) -> bool:
         """Delete a glossary entry. Returns True if a row was deleted."""
         with self._connect() as conn:
             cursor = conn.execute(
-                "DELETE FROM glossary_entries WHERE id = ?",
-                (entry_id,),
+                "DELETE FROM glossary_entries WHERE glossary_id = ?",
+                (glossary_id,),
             )
         return cursor.rowcount > 0

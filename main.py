@@ -21,44 +21,39 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import get_settings
 from db.database import Database
-from repositories.sop_repository import SopRepository
 from repositories.glossary_repository import GlossaryRepository
-from routers import glossary_router, sop_router, template_router, writing_guide_router
-from services.glossary_service import GlossaryService
-from services.sop_service import SopService
+from repositories.sop_repository import SopRepository
 from repositories.template_repository import TemplateRepository
 from repositories.writing_guide_repository import WritingGuideRepository
+from routers import (glossary_router, sop_router, template_router,
+                     writing_guide_router)
+from services.glossary_service import GlossaryService
+from services.sop_service import SopService
 from services.template_service import TemplateService
 from services.writing_guide_service import WritingGuideService
 from utils.correlation import generate_correlation_id, set_correlation_id
 
-
-
 # ── Logging setup ───────────────────────────────────────────────────────
-
-
-
 app = FastAPI()
-
 
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  
+    allow_headers=["*"],
 )
 
 
 @app.get("/")
 def read_root():
     return {"status": "CORS is synced!"}
+
 
 def _configure_logging() -> None:
     from utils.logger import setup_logger
@@ -103,10 +98,13 @@ def _scan_and_register_sops(db: Database) -> None:
     total = len(db.list_sops())
     logger.info(
         "SOP scan complete — %d new, %d total SOP(s) in registry",
-        registered_count, total,
+        registered_count,
+        total,
     )
 
+
 # ── Lifespan (startup / shutdown) ──────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -134,8 +132,6 @@ async def lifespan(app: FastAPI):
 
     # 2. Scan and register SOP documents
     _scan_and_register_sops(db)
-
-
 
     # 4. Initialize Template Library (Repository -> Service -> Router)
     template_repo = TemplateRepository(db=db)
@@ -270,7 +266,6 @@ async def root():
         "version": "0.1.0",
         "docs": "/docs",
         "endpoints": {
-
             "templates": "/api/v1/templates",
             "writing_guides": "/api/v1/writing-guides",
             "health": "/health",

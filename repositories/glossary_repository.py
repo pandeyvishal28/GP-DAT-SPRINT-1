@@ -22,21 +22,25 @@ class GlossaryRepository:
 
     def create(
         self,
-        entry_id: str,
+        glossary_id: str,
         term: str,
         scope: str,
         do_not_translate: bool = False,
         translations: dict[str, str] | None = None,
-        notes: str | None = None,
+        comments: str | None = None,
+        de_comments: str | None = None,
+        es_comments: str | None = None,
     ) -> None:
         """Insert a new glossary entry."""
         self._db.insert_glossary_entry(
-            entry_id=entry_id,
+            glossary_id=glossary_id,
             term=term,
             scope=scope,
             do_not_translate=do_not_translate,
             translations_json=json.dumps(translations) if translations else None,
-            notes=notes,
+            comments=comments,
+            de_comments=de_comments,
+            es_comments=es_comments,
         )
 
     def list_all(
@@ -48,9 +52,9 @@ class GlossaryRepository:
         rows = self._db.list_glossary_entries(scope=scope, is_active=is_active)
         return [self._deserialize(row) for row in rows]
 
-    def get_by_id(self, entry_id: str) -> dict[str, Any] | None:
+    def get_by_id(self, glossary_id: str) -> dict[str, Any] | None:
         """Fetch a single glossary entry by ID."""
-        row = self._db.get_glossary_entry(entry_id)
+        row = self._db.get_glossary_entry(glossary_id)
         return self._deserialize(row) if row else None
 
     def get_by_term_and_scope(self, term: str, scope: str) -> dict[str, Any] | None:
@@ -58,18 +62,18 @@ class GlossaryRepository:
         row = self._db.get_glossary_entry_by_term_scope(term, scope)
         return self._deserialize(row) if row else None
 
-    def update(self, entry_id: str, **fields: Any) -> bool:
+    def update(self, glossary_id: str, **fields: Any) -> bool:
         """Update specific fields on a glossary entry."""
         if "translations" in fields:
             val = fields["translations"]
             fields["translations"] = json.dumps(val) if val is not None else None
         if "do_not_translate" in fields:
             fields["do_not_translate"] = 1 if fields["do_not_translate"] else 0
-        return self._db.update_glossary_entry(entry_id, **fields)
+        return self._db.update_glossary_entry(glossary_id, **fields)
 
-    def delete(self, entry_id: str) -> bool:
+    def delete(self, glossary_id: str) -> bool:
         """Delete a glossary entry. Returns True if a row was deleted."""
-        return self._db.delete_glossary_entry(entry_id)
+        return self._db.delete_glossary_entry(glossary_id)
 
     # ── helpers ─────────────────────────────────────────────────────
 

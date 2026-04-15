@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 
 from models.writing_guide_schemas import (
     WritingGuideDetail,
@@ -77,6 +77,7 @@ async def list_guides(include_archived: bool = False) -> dict:
                 description=g.get("description"),
                 is_active=bool(g.get("is_active", 1)),
                 is_default=bool(g.get("is_default", 0)),
+                has_content=bool(g.get("content")),  # True if content exists
                 original_filename=g.get("original_filename"),
                 uploaded_at=g.get("uploaded_at"),
             ).model_dump()
@@ -159,6 +160,7 @@ async def get_guide(guide_id: str) -> WritingGuideDetail:
         content=g.get("content"),
         is_active=bool(g.get("is_active", 1)),
         is_default=bool(g.get("is_default", 0)),
+        has_content=bool(g.get("content")),  # True if content exists
         original_filename=g.get("original_filename"),
         uploaded_at=g.get("uploaded_at"),
     )
@@ -200,6 +202,7 @@ async def update_guide(
         content=g.get("content"),
         is_active=bool(g.get("is_active", 1)),
         is_default=bool(g.get("is_default", 0)),
+        has_content=bool(g.get("content")),  # True if content exists
         original_filename=g.get("original_filename"),
         uploaded_at=g.get("uploaded_at"),
     )

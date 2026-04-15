@@ -25,7 +25,7 @@ class CorrelationFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         from utils.correlation import get_correlation_id
 
-        record.correlation_id = get_correlation_id()  # type: ignore[attr-defined]
+        record.correlation_id = get_correlation_id()
         return True
 
 
@@ -69,7 +69,10 @@ def setup_logger() -> None:
     )
 
     detailed_formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)-8s | %(correlation_id)s | %(name)-25s | [%(filename)s:%(lineno)d] | %(message)s",
+        fmt=(
+            "%(asctime)s | %(levelname)-8s | %(correlation_id)s"
+            " | %(name)-25s | [%(filename)s:%(lineno)d] | %(message)s"
+        ),
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 

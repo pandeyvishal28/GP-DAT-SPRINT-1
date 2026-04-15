@@ -12,7 +12,6 @@ Heading size thresholds calibrated against BI SOP PDFs
 
 from __future__ import annotations
 
-import io
 import logging
 import re
 from pathlib import Path
@@ -167,7 +166,7 @@ class SopParserService:
     # ── PDF → Markdown (PyMuPDF + pdfplumber) ────────────────────────
 
     def _parse_pdf_to_markdown(self, file_path: Path) -> str:
-        import fitz          # PyMuPDF
+        import fitz          # type: ignore
         import pdfplumber
 
         # ---- Step 1: extract tables per page via pdfplumber ----
@@ -186,8 +185,8 @@ class SopParserService:
 
         for pg_idx in range(len(doc)):
             page = doc[pg_idx]
-            page_h = page.rect.height
-            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+            page_h = page.rect.height  # type: ignore
+            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]  # type: ignore
 
             page_lines: list[str] = []
 
@@ -247,7 +246,8 @@ class SopParserService:
             text = para.text.strip()
             if not text:
                 continue
-            style_name = (para.style.name or "").lower()
+            style = para.style.name if para.style else "Normal"
+            style_name = style.lower()
             if "heading 1" in style_name:
                 lines.append(f"# {text}")
             elif "heading 2" in style_name:

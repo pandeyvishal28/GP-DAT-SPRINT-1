@@ -53,7 +53,10 @@ def _get_service() -> SopService:
 async def upload_sop(
     file: UploadFile = File(..., description="SOP file — .pdf, .docx, .doc, or .txt"),
     action: str = Form("", description="Set to 'update' to overwrite an existing SOP."),
-    version: str = Form("", description="Optional version string (e.g. '2.0'). Auto-incremented if not provided on re-upload."),
+    version: str = Form(
+        "",
+        description="Optional version string (e.g. '2.0'). Auto-incremented if not provided on re-upload.",
+    ),
 ) -> dict:
     service = _get_service()
     try:

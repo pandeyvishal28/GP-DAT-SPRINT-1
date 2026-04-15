@@ -60,8 +60,10 @@ def _get_service() -> GlossaryService:
         "Set to `false` if translations should be provided.\n"
         "- **de**: German translation of the term. Required when `do_not_translate` is `false`.\n"
         "- **es**: Spanish translation of the term. Required when `do_not_translate` is `false`.\n"
-        "- **notes**: Optional free-text field for additional context, "
-        "e.g. `Also known as API in pharma context`.\n\n"
+        "- **comments**: Optional English comment for additional context, "
+        "e.g. `Also known as API in pharma context`.\n"
+        "- **de_comments**: German-specific comment. Only accepted when `de` translation is provided.\n"
+        "- **es_comments**: Spanish-specific comment. Only accepted when `es` translation is provided.\n\n"
         "**Example — translated term:**\n"
         "```\n"
         "term: Active Ingredient\n"
@@ -69,15 +71,15 @@ def _get_service() -> GlossaryService:
         "do_not_translate: false\n"
         "de: Wirkstoff\n"
         "es: Principio activo\n"
-        "notes: Also known as API\n"
+        "comments: Also known as API\n"
+        "de_comments: Hinweis für DE\n"
         "```\n\n"
         "**Example — keep as-is (brand name):**\n"
         "```\n"
         "term: Spiriva Respimat\n"
         "scope: global\n"
         "do_not_translate: true\n"
-        "de: (leave empty)\n"
-        "es: (leave empty)\n"
+        "comments: Brand name — keep as-is\n"
         "```"
     ),
 )
@@ -87,23 +89,38 @@ async def create_glossary_entry(
     do_not_translate: bool = Form(default=False, description="Check as-is — if true, the term will not be translated"),
     de: str = Form(default="", description="German translation of the glossary term"),
     es: str = Form(default="", description="Spanish translation of the glossary term"),
-    notes: str = Form(default="", description="Optional notes or remarks about this entry"),
+    comments: str = Form(default="", description="Optional English comment for additional context"),
+    de_comments: str = Form(default="", description="German-specific comment (requires de translation)"),
+    es_comments: str = Form(default="", description="Spanish-specific comment (requires es translation)"),
 ) -> GlossaryEntryResponse:
     """Add a new glossary term with optional translations."""
     service = _get_service()
+
+    # Validate translations before model construction so FastAPI can return 422
+    if not do_not_translate and not de and not es:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one translation (de or es) is required when do_not_translate is false",
+        )
 
     translations = GlossaryTranslations(
         de=de or None,
         es=es or None,
     ) if (de or es) else None
 
-    data = GlossaryEntryCreate(
-        term=term,
-        scope=scope,
-        do_not_translate=do_not_translate,
-        translations=translations,
-        notes=notes or None,
-    )
+    try:
+        data = GlossaryEntryCreate(
+            term=term,
+            scope=scope,
+            do_not_translate=do_not_translate,
+            translations=translations,
+            comments=comments or None,
+            de_comments=de_comments or None,
+            es_comments=es_comments or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
     entry = service.create_entry(data)
     return GlossaryEntryResponse(**entry)
 
@@ -136,22 +153,29 @@ async def list_glossary_entries(
     "/import",
     summary="Import glossary from Excel",
     description=(
-        "Upload an `.xlsx` file to bulk-import glossary entries.\n\n"
-        "**Excel format:**\n"
-        "- Row 1 must contain headers: `term`, `scope`, `do_not_translate`, `de`, `es`, `notes`\n"
-        "- `term` *(required)*: The source glossary term.\n"
-        "- `scope` *(required)*: One of `global`, `local`, `functional`.\n"
-        "- `do_not_translate` *(required)*: `true`/`false`, `yes`/`no`, or `1`/`0`.\n"
-        "- `de`: German translation (required when `do_not_translate` is false).\n"
-        "- `es`: Spanish translation (required when `do_not_translate` is false).\n"
-        "- `notes`: Optional remarks.\n\n"
+        "Upload a client-format `.xlsx` glossary file to bulk-import entries.\n\n"
+        "**Excel format (provided by client):**\n"
+        "- The workbook must contain a sheet named `EN>DE terms` (German) or "
+        "`EN>ES terms` (Spanish). The language is auto-detected from the tab name.\n"
+        "- **Row 1** is blank; **Row 2** contains headers: "
+        "`English | Comments | en->DE | DE comments` (or the ES equivalents).\n"
+        "- **Row 3+** contains data.\n"
+        "- If the translation cell starts with `No translation`, the term is marked as "
+        "do-not-translate. A parenthetical hint like `No translation (Wirkstoff)` is "
+        "stored as a language-specific comment.\n\n"
+        "**Parameters:**\n"
+        "- **file** *(required)*: The `.xlsx` file.\n"
+        "- **scope**: Scope to assign to all imported entries. Defaults to `global`.\n\n"
         "**Duplicate handling:** If a term + scope combination already exists, "
-        "the existing entry is **updated** with the values from the Excel row.\n\n"
-        "Use `GET /api/v1/glossary/template` to download a blank template with the correct format."
+        "the existing entry is **updated** with the values from the Excel row."
     ),
 )
 async def import_glossary(
     file: UploadFile = File(..., description="Excel file (.xlsx) with glossary entries"),
+    scope: GlossaryScope = Form(
+        default=GlossaryScope.GLOBAL,
+        description="Scope to assign: global / local / functional",
+    ),
 ) -> dict:
     """Bulk-import glossary entries from an uploaded .xlsx file."""
     service = _get_service()
@@ -160,30 +184,36 @@ async def import_glossary(
         raise HTTPException(status_code=400, detail="Only .xlsx files are accepted")
 
     contents = await file.read()
-    return service.import_from_excel(contents)
+    return service.import_from_excel(contents, scope=scope.value)
 
 
 @router.get(
     "/export",
     summary="Export glossary to Excel",
     description=(
-        "Download all glossary entries as an `.xlsx` file.\n\n"
+        "Download glossary entries as a client-format `.xlsx` file for one language.\n\n"
+        "**Required parameter:**\n"
+        "- **language**: Target language — `de` (German) or `es` (Spanish).\n\n"
         "**Optional filter:**\n"
         "- **scope**: Pass `global`, `local`, or `functional` to export only entries "
         "of that scope. If omitted, all entries are exported.\n\n"
-        "**Example:** `GET /api/v1/glossary/export?scope=global`"
+        "**Example:** `GET /api/v1/glossary/export?language=de&scope=global`"
     ),
 )
 async def export_glossary(
+    language: str = Query(..., description="Target language: de or es"),
     scope: Optional[GlossaryScope] = Query(default=None, description="Filter by scope"),
 ) -> StreamingResponse:
     """Download glossary entries as an .xlsx file."""
     service = _get_service()
-    data = service.export_to_excel(scope=scope.value if scope else None)
+    lang = language.strip().lower()
+    if lang not in ("de", "es"):
+        raise HTTPException(status_code=422, detail="language must be 'de' or 'es'")
+    data = service.export_to_excel(language=lang, scope=scope.value if scope else None)
     return StreamingResponse(
         io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=glossary_export.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename=glossary_export_{lang}.xlsx"},
     )
 
 
@@ -191,43 +221,49 @@ async def export_glossary(
     "/template",
     summary="Download glossary Excel template",
     description=(
-        "Download a blank `.xlsx` template with the correct column headers "
-        "and two example rows.\n\n"
-        "Fill in the template and upload it via `POST /api/v1/glossary/import` "
-        "to bulk-import glossary entries."
+        "Download a blank client-format `.xlsx` template for one language.\n\n"
+        "**Required parameter:**\n"
+        "- **language**: Target language — `de` (German) or `es` (Spanish).\n\n"
+        "The template includes correct column headers and example rows. "
+        "Fill it in and upload via `POST /api/v1/glossary/import`."
     ),
 )
-async def download_template() -> StreamingResponse:
+async def download_template(
+    language: str = Query(..., description="Target language: de or es"),
+) -> StreamingResponse:
     """Download a blank glossary template .xlsx file."""
     service = _get_service()
-    data = service.get_template_excel()
+    lang = language.strip().lower()
+    if lang not in ("de", "es"):
+        raise HTTPException(status_code=422, detail="language must be 'de' or 'es'")
+    data = service.get_template_excel(language=lang)
     return StreamingResponse(
         io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=glossary_template.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename=glossary_template_{lang}.xlsx"},
     )
 
 
 @router.get(
-    "/{entry_id}",
+    "/{glossary_id}",
     response_model=GlossaryEntryResponse,
     summary="Get glossary entry",
     description=(
         "Fetch a single glossary entry by its ID.\n\n"
         "**Path parameter:**\n"
-        "- **entry_id**: The unique identifier returned when the entry was created.\n\n"
+        "- **glossary_id**: The unique identifier returned when the entry was created.\n\n"
         "Returns `404` if no entry with the given ID exists."
     ),
 )
-async def get_glossary_entry(entry_id: str) -> GlossaryEntryResponse:
+async def get_glossary_entry(glossary_id: str) -> GlossaryEntryResponse:
     """Fetch a single glossary entry by ID."""
     service = _get_service()
-    entry = service.get_entry(entry_id)
+    entry = service.get_entry(glossary_id)
     return GlossaryEntryResponse(**entry)
 
 
 @router.put(
-    "/{entry_id}",
+    "/{glossary_id}",
     response_model=GlossaryEntryResponse,
     summary="Update glossary entry",
     description=(
@@ -240,7 +276,9 @@ async def get_glossary_entry(entry_id: str) -> GlossaryEntryResponse:
         "or `false` to require translations.\n"
         "- **de**: Updated German translation.\n"
         "- **es**: Updated Spanish translation.\n"
-        "- **notes**: Updated notes.\n\n"
+        "- **comments**: Updated English comment.\n"
+        "- **de_comments**: Updated German-specific comment (requires de translation).\n"
+        "- **es_comments**: Updated Spanish-specific comment (requires es translation).\n\n"
         "**Example — update only the German translation:**\n"
         "```\n"
         "de: Pharmazeutischer Wirkstoff\n"
@@ -250,13 +288,15 @@ async def get_glossary_entry(entry_id: str) -> GlossaryEntryResponse:
     ),
 )
 async def update_glossary_entry(
-    entry_id: str,
+    glossary_id: str,
     term: str = Form(default="", description="Updated glossary term"),
     scope: Optional[GlossaryScope] = Form(default=None, description="Updated scope: global / local / functional"),
     do_not_translate: bool = Form(default=False, description="Check as-is — true or false"),
     de: str = Form(default="", description="Updated German translation"),
     es: str = Form(default="", description="Updated Spanish translation"),
-    notes: str = Form(default="", description="Updated notes or remarks"),
+    comments: str = Form(default="", description="Updated English comment"),
+    de_comments: str = Form(default="", description="Updated German-specific comment"),
+    es_comments: str = Form(default="", description="Updated Spanish-specific comment"),
 ) -> GlossaryEntryResponse:
     """Partially update a glossary entry."""
     service = _get_service()
@@ -273,26 +313,34 @@ async def update_glossary_entry(
             de=de or None,
             es=es or None,
         )
-    if notes:
-        update_fields["notes"] = notes
+    if comments:
+        update_fields["comments"] = comments
+    if de_comments:
+        update_fields["de_comments"] = de_comments
+    if es_comments:
+        update_fields["es_comments"] = es_comments
 
-    data = GlossaryEntryUpdate(**update_fields)
-    entry = service.update_entry(entry_id, data)
+    try:
+        data = GlossaryEntryUpdate(**update_fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    entry = service.update_entry(glossary_id, data)
     return GlossaryEntryResponse(**entry)
 
 
 @router.delete(
-    "/{entry_id}",
+    "/{glossary_id}",
     summary="Delete glossary entry",
     description=(
         "Permanently delete a glossary entry by its ID.\n\n"
         "**Path parameter:**\n"
-        "- **entry_id**: The unique identifier of the entry to delete.\n\n"
+        "- **glossary_id**: The unique identifier of the entry to delete.\n\n"
         "Returns `404` if no entry with the given ID exists. "
         "This action cannot be undone."
     ),
 )
-async def delete_glossary_entry(entry_id: str) -> dict[str, str]:
+async def delete_glossary_entry(glossary_id: str) -> dict[str, str]:
     """Delete a glossary entry permanently."""
     service = _get_service()
-    return service.delete_entry(entry_id)
+    return service.delete_entry(glossary_id)

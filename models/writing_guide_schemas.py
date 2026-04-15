@@ -22,6 +22,7 @@ class WritingGuideListItem(BaseModel):
     description: Optional[str] = None
     is_active: bool = True
     is_default: bool = False
+    has_content: bool = False
     original_filename: Optional[str] = None
     uploaded_at: Optional[str] = None
 
@@ -36,6 +37,7 @@ class WritingGuideDetail(BaseModel):
     content: Optional[str] = None
     is_active: bool = True
     is_default: bool = False
+    has_content: bool = False
     original_filename: Optional[str] = None
     uploaded_at: Optional[str] = None
 

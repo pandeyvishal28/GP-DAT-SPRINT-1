@@ -68,4 +68,3 @@ class TemplateFromTextRequest(BaseModel):
     content: str = Field(..., description="Markdown template content (pasted from UI)")
     type: str = Field(default="Global", description="Global / Local / Function-specific")
     description: Optional[str] = Field(default=None, description="Short description (optional)")
-
