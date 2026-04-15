@@ -29,6 +29,7 @@ class _InMemoryDB:
             CREATE TABLE writing_guides (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                title TEXT,
                 description TEXT,
                 content TEXT,
                 is_active INTEGER DEFAULT 1,

@@ -18,6 +18,7 @@ class WritingGuideListItem(BaseModel):
 
     id: str
     name: str
+    title: Optional[str] = None
     description: Optional[str] = None
     is_active: bool = True
     is_default: bool = False
@@ -30,6 +31,7 @@ class WritingGuideDetail(BaseModel):
 
     id: str
     name: str
+    title: Optional[str] = None
     description: Optional[str] = None
     content: Optional[str] = None
     is_active: bool = True
@@ -43,6 +45,7 @@ class WritingGuideUploadResponse(BaseModel):
 
     guide_id: str
     name: str
+    title: Optional[str] = None
     has_content: bool = False
     message: str = "Writing guide uploaded successfully"
 
@@ -53,6 +56,6 @@ class WritingGuideUploadResponse(BaseModel):
 class WritingGuideUpdateRequest(BaseModel):
     """Body for PUT /writing-guides/{id}. All fields optional."""
 
-    name: Optional[str] = Field(default=None, description="Guide name")
+    title: Optional[str] = Field(default=None, description="Extracted / user-corrected title")
     description: Optional[str] = Field(default=None, description="Short description (optional)")
     content: Optional[str] = Field(default=None, description="Markdown content")

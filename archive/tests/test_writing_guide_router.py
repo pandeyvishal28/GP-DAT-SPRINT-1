@@ -112,7 +112,6 @@ class TestUploadGuide:
         response = client.post(
             "/api/v1/writing-guides",
             files={"file": ("guide.pdf", dummy_bytes, "application/pdf")},
-            data={"name": "My Guide", "description": "Test"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -125,27 +124,24 @@ class TestUploadGuide:
         response = client.post(
             "/api/v1/writing-guides",
             files={"file": ("guide.pdf", b"%PDF-1.4", "application/pdf")},
-            data={"name": "My Guide"},
         )
         data = response.json()
         assert "message" in data
         assert "extraction" in data["message"].lower() or "upload" in data["message"].lower()
 
-    def test_returns_422_when_filename_missing(self, client, mock_service):
-        # Missing file field payload catches at FastAPI's validation layer
+    def test_returns_400_when_filename_missing(self, client, mock_service):
         response = client.post(
             "/api/v1/writing-guides",
             files={"file": ("", b"content", "application/octet-stream")},
-            data={"name": "Test"},
         )
-        assert response.status_code == 422
+        assert response.status_code == 400
+        assert "must have a filename" in response.json()["detail"]
 
     def test_returns_400_on_service_value_error(self, client, mock_service):
         mock_service.upload_guide.side_effect = ValueError("Unsupported file type '.xyz'")
         response = client.post(
             "/api/v1/writing-guides",
             files={"file": ("file.xyz", b"content", "text/plain")},
-            data={"name": "Bad Upload"},
         )
         assert response.status_code == 400
         assert "Unsupported" in response.json()["detail"]
