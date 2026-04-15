@@ -9,8 +9,7 @@ Usage:
     from config.settings import get_settings
 
     settings = get_settings()
-    print(settings.LLM_PROVIDER)
-    print(settings.APOLLO_BASE_URL)
+    print(settings.APP_HOST)
 """
 
 from __future__ import annotations
@@ -34,10 +33,7 @@ class Settings(BaseSettings):
     TEMPLATE_DIR: str = Field(
         default="data/templates", description="Directory for GP doc templates"
     )
-    ENTERPRISE_DATA_DIR: str = Field(
-        default="data/enterprise_data",
-        description="Directory for enterprise reference data",
-    )
+
     SQLITE_DB_PATH: str = Field(
         default="data/gp-dat.db", description="SQLite database file path"
     )

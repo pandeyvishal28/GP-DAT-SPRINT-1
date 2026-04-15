@@ -1,0 +1,78 @@
+// See https://www.opendevstack.org/ods-documentation/ for usage and customization.
+
+@Library('ods-jenkins-shared-library@4.x') _
+
+odsComponentPipeline(
+  imageStreamTag: 'ods/jenkins-agent-python:4.x',
+  branchToEnvironmentMapping: [
+    'master': 'dev',
+    // 'release/': 'test'
+  ]
+) { context ->
+  odsComponentFindOpenShiftImageOrElse(context) {
+    stageTestSuite(context)
+    odsComponentStageScanWithSonar(context)
+    stageBuild(context)
+    odsComponentStageBuildOpenShiftImage(context, [
+      buildArgs: [
+        nexusHostWithBasicAuth: context.nexusHostWithBasicAuth,
+        nexusHostWithoutScheme: context.nexusHostWithoutScheme
+      ]
+    ])
+  }
+  odsComponentStageRolloutOpenShiftDeployment(context)
+}
+
+def stageTestSuite(def context) {
+  String testLocation = 'build/test-results/test'
+  String coverageLocation = 'build/test-results/coverage'
+
+  stage('Prepare Test Suite') {
+    sh """
+      python3.12 -m venv testsuite
+      . ./testsuite/bin/activate
+      pip install -r tests_requirements.txt
+      pip check
+      mkdir -p ${testLocation}
+      mkdir -p ${coverageLocation}
+    """
+  }
+
+  stage('Lint') {
+    sh """
+      . ./testsuite/bin/activate
+      mypy src
+      flake8 --max-line-length=120 src
+    """
+  }
+
+  stage('Unit Test') {
+    def status = sh(
+      script: """
+        . ./testsuite/bin/activate
+        PYTHONPATH=src python3.12 -m pytest --junitxml=tests.xml -o junit_family=xunit2 --cov-report term-missing --cov-report xml --cov=src -o testpaths=tests
+        sed -i-e 's/test_//g' tests.xml
+      """,
+      returnStatus: true
+    )
+
+    sh """
+      mv tests.xml ${testLocation} || true
+      mv coverage.xml ${coverageLocation} || true
+      mv .coverage ${coverageLocation} || true
+    """
+
+    if (status != 0) {
+      error "Unit tests failed!"
+    }
+  }
+}
+
+def stageBuild(def context) {
+  stage('Build') {
+    sh """
+      cp -rv src docker/app
+      cp -rv requirements.txt docker/app
+    """
+  }
+}

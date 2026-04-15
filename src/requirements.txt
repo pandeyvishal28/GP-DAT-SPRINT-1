@@ -10,7 +10,6 @@ python-multipart>=0.0.18
 # --- Data Validation & Settings ---
 pydantic>=2.10.0
 pydantic-settings>=2.7.0
-lxml-stubs>=0.1.0
 
 # --- Document Processing ---
 python-docx>=1.1.0
