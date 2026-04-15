@@ -12,25 +12,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.enums import (CritiqueVerdict, DocumentStatus, GlossaryScope,
                           Language)
+from models.enums import DocumentStatus, GlossaryScope, Language
 
 # =============================================================================
 #  API Request Models
 # =============================================================================
-
-
-class GenerationRequest(BaseModel):
-    """Request payload for GP Doc generation (JSON body, used alongside file uploads)."""
-
-    template_id: str = Field(
-        default="", description="Template to use (empty = default/latest)"
-    )
-    user_prompt: str = Field(
-        default="", description="Freeform user instructions for document generation"
-    )
-    source_language: Language = Field(
-        default=Language.ENGLISH, description="Language of the input data"
-    )
-
 
 class TemplateListItem(BaseModel):
     """Single template entry returned by the template listing endpoint."""
@@ -57,20 +43,6 @@ class GWPInfo(BaseModel):
     title: str = Field(default="")
     effective_date: str = Field(default="")
     is_active: bool = Field(default=True)
-
-
-class AdaptationRequest(BaseModel):
-    """Request payload for adapting an older document to a new template."""
-
-    old_document_content: str = Field(
-        ..., description="Full text content of the older document"
-    )
-    new_template_id: str = Field(..., description="Target template ID to adapt to")
-    preserve_sections: Optional[list[str]] = Field(
-        default=None,
-        description="Specific section names to ensure are preserved during adaptation",
-    )
-
 
 class SOPTranslationRequest(BaseModel):
     """Request payload for translating a pharma/healthcare SOP document."""
@@ -104,36 +76,6 @@ class SOPTranslationRequest(BaseModel):
 # =============================================================================
 #  API Response Models
 # =============================================================================
-
-
-class JobResponse(BaseModel):
-    """Response returned when a pipeline job is initiated."""
-
-    job_id: str = Field(..., description="Unique identifier for the processing job")
-    status: DocumentStatus = Field(..., description="Current status of the job")
-    message: str = Field(
-        default="Job accepted", description="Human-readable status message"
-    )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-class DocumentResponse(BaseModel):
-    """Response containing a completed document."""
-
-    job_id: str
-    status: DocumentStatus
-    content: str = Field(default="", description="Final document content (text)")
-    document_path: str = Field(
-        default="", description="Path to the generated .docx file"
-    )
-    download_url: str = Field(
-        default="", description="API endpoint to download the generated file"
-    )
-    template_id: Optional[str] = None
-    language: Language = Language.ENGLISH
-    metadata: Optional[dict[str, Any]] = None
-    completed_at: datetime = Field(default_factory=datetime.utcnow)
-
 
 class SOPTranslationResponse(BaseModel):
     """Response containing the translated SOP document."""
@@ -190,102 +132,6 @@ class TemplateChapter(BaseModel):
 
 # Rebuild TemplateInfo to resolve the forward reference to TemplateChapter
 TemplateInfo.model_rebuild()
-
-
-class CritiqueResult(BaseModel):
-    """Output of the Critic Agent's quality evaluation."""
-
-    verdict: CritiqueVerdict
-    overall_score: float = Field(
-        ..., ge=0.0, le=1.0, description="Quality score from 0.0 to 1.0"
-    )
-    section_scores: Optional[dict[str, float]] = Field(
-        default=None,
-        description="Per-section quality scores",
-    )
-    issues: list[str] = Field(
-        default_factory=list, description="List of identified issues"
-    )
-    suggestions: list[str] = Field(
-        default_factory=list, description="Improvement suggestions"
-    )
-    requires_human_review: bool = False
-    review_reason: Optional[str] = None
-
-
-class EnrichedContext(BaseModel):
-    """Output of the Context Agent — enriched understanding of the user request."""
-
-    model_config = {
-        "extra": "forbid"
-    }
-    '''Ensures additionalProperties: false at top level'''
-
-    detected_intent: str = Field(..., description="Detected user intent")
-    document_title: str = Field(
-        default="",
-        description=(
-            "A natural, professional title for the document being generated"
-            " (e.g. 'Clinical Summary for Spiriva Respimat')"
-        ),
-    )
-    key_topics: list[str] = Field(default_factory=list)
-    extracted_entities: dict[str, str] = Field(
-        default_factory=dict,
-        description="Key entities extracted from input, e.g. product name, indication",
-    )
-    input_summary: str = Field(
-        default="", description="Summarised version of the user input"
-    )
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    additional_context: dict[str, str] = Field(
-        default_factory=dict,
-        description="Any extra context key-value pairs",
-    )
-
-
-class AdaptedContentSection(BaseModel):
-    """A single adapted section generated by the Reasoning Agent."""
-
-    section_id: str = Field(
-        ...,
-        description=(
-            "The template placeholder or chapter ID this content"
-            " belongs to (e.g. 'definitions_abbreviations')"
-        ),
-    )
-    section_title: str = Field(
-        ...,
-        description=(
-            "The proper human-readable chapter heading exactly as it appears"
-            " in the template (e.g. 'DEFINITIONS & ABBREVIATIONS')"
-        ),
-    )
-    content: str = Field(
-        ..., description="The generated Markdown content adapted for this section"
-    )
-    original_excerpt: str = Field(
-        default="", description="Relevant text extracted from the old document"
-    )
-    changes_made: str = Field(
-        default="",
-        description="Summary of syntactic or structural changes made to the original text",
-    )
-    reasoning: str = Field(
-        default="", description="Why this content was generated or modified in this way"
-    )
-
-
-class AdaptationMap(BaseModel):
-    """Full mapping output containing all adapted sections for the document."""
-
-    sections: list[AdaptedContentSection] = Field(
-        ..., description="List of all adapted sections"
-    )
-    overall_mapping_strategy: str = Field(
-        default="",
-        description="High-level strategy used for mapping the old document to the new template",
-    )
 
 
 # =============================================================================

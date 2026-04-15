@@ -44,9 +44,6 @@ class WritingGuideService:
         self,
         file_bytes: bytes,
         filename: str,
-        name: str,
-        *,
-        description: str | None = None,
     ) -> dict[str, Any]:
         """
         Upload a writing guide file and create a DB record.
@@ -75,8 +72,9 @@ class WritingGuideService:
         # Create DB record (content = NULL — parsing is a future step)
         self._repo.insert(
             guide_id=guide_id,
-            name=name,
-            description=description,
+            name=Path(filename).stem,
+            title=None,
+            description=None,
             content=None,
             original_filename=filename,
         )
@@ -116,7 +114,26 @@ class WritingGuideService:
 
         try:
             content = extract_text(file_path)
-            self._repo.update(guide_id, content=content)
+            
+            # Extract metadata to gracefully populate omitted fields
+            from utils.writing_guide_parser import extract_title, extract_description
+            
+            update_kwargs: dict[str, Any] = {"content": content}
+            
+            # Populate title if currently empty/None
+            if not guide.get("title"):
+                extracted_title = extract_title(content)
+                if extracted_title:
+                    update_kwargs["title"] = extracted_title
+            
+            # Only populate description if current one is empty/None
+            if not guide.get("description"):
+                extracted_description = extract_description(content)
+                if extracted_description:
+                    update_kwargs["description"] = extracted_description
+
+            self._repo.update(guide_id, **update_kwargs)
+            
             logger.info(
                 "Writing guide parsed successfully: id='%s' (%d chars)",
                 guide_id,

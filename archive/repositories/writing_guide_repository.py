@@ -26,6 +26,7 @@ class WritingGuideRepository:
         guide_id: str,
         name: str,
         *,
+        title: str | None = None,
         description: str | None = None,
         content: str | None = None,
         is_active: bool = True,
@@ -42,13 +43,14 @@ class WritingGuideRepository:
             conn.execute(
                 """
                 INSERT INTO writing_guides
-                    (id, name, description, content,
+                    (id, name, title, description, content,
                      is_active, is_default, original_filename)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     guide_id,
                     name,
+                    title,
                     description,
                     content,
                     1 if is_active else 0,
@@ -94,7 +96,7 @@ class WritingGuideRepository:
         Returns True if a row was updated.
         """
         allowed = {
-            "name", "description", "content",
+            "name", "title", "description", "content",
             "is_active", "is_default", "original_filename",
         }
         to_update = {k: v for k, v in fields.items() if k in allowed}

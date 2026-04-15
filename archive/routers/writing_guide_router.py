@@ -73,6 +73,7 @@ async def list_guides(include_archived: bool = False) -> dict:
             WritingGuideListItem(
                 id=g["id"],
                 name=g["name"],
+                title=g.get("title"),
                 description=g.get("description"),
                 is_active=bool(g.get("is_active", 1)),
                 is_default=bool(g.get("is_default", 0)),
@@ -102,8 +103,6 @@ async def list_guides(include_archived: bool = False) -> dict:
 async def upload_guide(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Writing guide file (PDF/DOCX/TXT)"),
-    name: str = Form(..., description="Human-readable guide name"),
-    description: str = Form(default="", description="Short description (optional)"),
 ) -> WritingGuideUploadResponse:
     service = _get_service()
 
@@ -115,8 +114,6 @@ async def upload_guide(
         result = service.upload_guide(
             file_bytes=file_bytes,
             filename=file.filename,
-            name=name,
-            description=description or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -127,6 +124,7 @@ async def upload_guide(
     return WritingGuideUploadResponse(
         guide_id=result["id"],
         name=result["name"],
+        title=result.get("title"),
         has_content=False,
         message="Writing guide uploaded. Content extraction in progress.",
     )
@@ -156,6 +154,7 @@ async def get_guide(guide_id: str) -> WritingGuideDetail:
     return WritingGuideDetail(
         id=g["id"],
         name=g["name"],
+        title=g.get("title"),
         description=g.get("description"),
         content=g.get("content"),
         is_active=bool(g.get("is_active", 1)),
@@ -196,6 +195,7 @@ async def update_guide(
     return WritingGuideDetail(
         id=g["id"],
         name=g["name"],
+        title=g.get("title"),
         description=g.get("description"),
         content=g.get("content"),
         is_active=bool(g.get("is_active", 1)),
